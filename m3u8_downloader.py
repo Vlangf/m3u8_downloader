@@ -1,4 +1,5 @@
 import os
+import re
 import requests
 import subprocess
 from urllib.parse import urlparse
@@ -13,17 +14,25 @@ class M3u8Downloader:
                           '(KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36'
         }
         self.m3u8_url: str = url
+    @staticmethod
+    def make_url(url: str, base_url):
+        if url.startswith('http'):
+            return url.strip()
 
-    def get_all_playlists(self) -> dict:
+        count_slash = url.count('/')
+        return '/'.join(base_url.split('/')[:-count_slash]) + '/' + url.strip()
+
+    def get_all_playlists_urls(self) -> dict:
         response = requests.get(self.m3u8_url, headers=self.headers)
         assert response.ok, f'Can\'t get playlists {response.text}'
 
         strings = response.text.split('\n')
         playlists = {}
-        while (i := 0) < len(strings):
+        i = 0
+        while i < len(strings):
             if strings[i].startswith('#EXT-X-STREAM-INF'):
-                resolution = strings[i].split('=')[-1]
-                playlists[resolution] = strings[i + 1]
+                resolution = re.findall(r'RESOLUTION=(\d*x\d*)', strings[i])[0]
+                playlists[resolution] = self.make_url(strings[i + 1], self.m3u8_url)
                 i += 2
             else:
                 i += 1
@@ -35,21 +44,18 @@ class M3u8Downloader:
         return playlists[resolution] if resolution else next(iter(playlists.values()))
 
     def get_ts_urls(self, playlist_url: str) -> list:
-        parsed_uri = urlparse(playlist_url)
-        host = '{uri.scheme}://{uri.netloc}'.format(uri=parsed_uri)
-
         response = requests.get(playlist_url, headers=self.headers)
         assert response.ok, f'Can\'t get ts urls {response.text}'
-
-        ts_urls = [(host + url).strip() for url in response.text.strip('\n') if url.endswith('.ts')]
+        ts_urls = [self.make_url(url, playlist_url) for url in response.text.split('\n') if url.endswith('.ts')]
         return ts_urls
 
     def make_ts_file(self, ts_urls: list) -> str:
         output_filename = f'file_{uuid4()}.ts'
         with open(output_filename, 'wb') as file:
-            for each in ts_urls:
+            for i, each in enumerate(ts_urls):
                 content = requests.request("GET", each, headers=self.headers, stream=True).content
                 file.write(content)
+                print(f'Downloaded {i} ts files from {len(ts_urls)}', end='\r')
         return output_filename
 
     @staticmethod
@@ -80,7 +86,7 @@ if __name__ == "__main__":
     m3u8_url = input('Enter m3u8 url: ')
     m3u8_downloader = M3u8Downloader(m3u8_url)
     if m3u8_downloader.m3u8_or_ts() == 'm3u8':
-        pls = m3u8_downloader.get_all_playlists()
+        pls = m3u8_downloader.get_all_playlists_urls()
 
         print('Choose an resolution: ')
         for i, option in enumerate(pls.keys()):
@@ -92,7 +98,7 @@ if __name__ == "__main__":
             else:
                 print('Invalid choice. Please try again.')
 
-        playlist_url = m3u8_downloader.choose_playlist_url(pls, int(resolution))
+        playlist_url = m3u8_downloader.choose_playlist_url(pls, list(pls.keys())[int(resolution) - 1])
     else:
         playlist_url = m3u8_url
 
