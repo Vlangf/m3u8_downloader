@@ -10,17 +10,20 @@ class M3u8Downloader:
 
     def __init__(self, url: str):
         self.headers: dict = {
-            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
-                          '(KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36'
+            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36'
         }
         self.m3u8_url: str = url
+
     @staticmethod
     def make_url(url: str, base_url):
         if url.startswith('http'):
             return url.strip()
 
-        count_slash = url.count('/')
-        return '/'.join(base_url.split('/')[:-count_slash]) + '/' + url.strip()
+        parsed_base_url = urlparse(base_url)
+        count_slash = url.count('/') + 1
+        result = f"{parsed_base_url.scheme}://{parsed_base_url.hostname}" \
+                 f"{'/'.join(parsed_base_url.path.split('/')[:-count_slash])}/{url}"
+        return result
 
     def get_all_playlists_urls(self) -> dict:
         response = requests.get(self.m3u8_url, headers=self.headers)
@@ -52,15 +55,18 @@ class M3u8Downloader:
     def make_ts_file(self, ts_urls: list) -> str:
         output_filename = f'file_{uuid4()}.ts'
         with open(output_filename, 'wb') as file:
+            print(f'Downloading ts files')
             for i, each in enumerate(ts_urls):
                 content = requests.request("GET", each, headers=self.headers, stream=True).content
                 file.write(content)
-                print(f'Downloaded {i} ts files from {len(ts_urls)}', end='\r')
+            print(f'Finish downloading ts files')
         return output_filename
 
     @staticmethod
     def make_mp4_from_ts(ts_file_name: str):
+        print('Start make video')
         subprocess.run(['ffmpeg', '-i', ts_file_name, f'{ts_file_name.split(".")[0]}.mp4'])
+        print('Finish make video')
 
     def m3u8_or_ts(self):
         response = requests.get(self.m3u8_url, headers=self.headers)
@@ -71,7 +77,7 @@ class M3u8Downloader:
     def from_m3u8_to_mp4(self, resolution: str = None):
         content_format = self.m3u8_or_ts()
         if content_format == 'm3u8':
-            playlists = self.get_all_playlists()
+            playlists = self.get_all_playlists_urls()
             playlist_url = self.choose_playlist_url(playlists, resolution)
         else:
             playlist_url = self.m3u8_url
