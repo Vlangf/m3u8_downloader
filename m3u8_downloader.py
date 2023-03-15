@@ -63,9 +63,10 @@ class M3u8Downloader:
         return output_filename
 
     @staticmethod
-    def make_mp4_from_ts(ts_file_name: str):
+    def make_mp4_from_ts(ts_file_name: str, output_file_name: str = None):
         print('Start make video')
-        subprocess.run(['ffmpeg', '-i', ts_file_name, f'{ts_file_name.split(".")[0]}.mp4'])
+        output_file_name_ = ts_file_name.split(".")[0] if not output_file_name else output_file_name
+        subprocess.run(['ffmpeg', '-i', ts_file_name, f'{output_file_name_}.mp4'])
         print('Finish make video')
 
     def m3u8_or_ts(self):
@@ -74,7 +75,7 @@ class M3u8Downloader:
 
         return 'm3u8' if '#EXT-X-STREAM-INF' in response.text else 'ts'
 
-    def from_m3u8_to_mp4(self, resolution: str = None):
+    def from_m3u8_to_mp4(self, resolution: str = None, output_file_name: str = None):
         content_format = self.m3u8_or_ts()
         if content_format == 'm3u8':
             playlists = self.get_all_playlists_urls()
@@ -84,7 +85,7 @@ class M3u8Downloader:
 
         ts_urls = self.get_ts_urls(playlist_url)
         ts_file_name = self.make_ts_file(ts_urls)
-        self.make_mp4_from_ts(ts_file_name)
+        self.make_mp4_from_ts(ts_file_name, output_file_name)
         os.remove(ts_file_name)
 
 
